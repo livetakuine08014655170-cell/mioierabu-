@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MIO ⇔ イエラブ CSV照合ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--navy:#17365d;--blue:#1f4e78;--gold:#b59b53;--bg:#f4f7fb;--text:#26323c;--muted:#6c7882;--border:#dbe3ea;--green:#168552;--red:#c63838;--yellow:#a96600}
+*{box-sizing:border-box} body{margin:0;font-family:"Yu Gothic","Meiryo",system-ui,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(135deg,var(--navy),var(--blue));color:white;padding:22px 16px;border-bottom:4px solid var(--gold)}
+.inner,.wrap{max-width:1250px;margin:auto} header h1{font-size:24px;margin:0 0 6px} header p{margin:0;font-size:13px;color:#e8eef5}
+.wrap{padding:20px 14px 60px}.panel{background:white;border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:15px;box-shadow:0 4px 18px rgba(31,78,120,.06)}
+h2{margin:0 0 14px;font-size:18px;color:var(--navy)}
+.uploads{display:grid;grid-template-columns:1fr 1fr;gap:14px}.drop{border:2px dashed #aebdca;border-radius:12px;padding:17px;background:#fafcfe}.drop.drag{border-color:var(--gold);background:#fffaf0}
+input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(--blue);margin-top:8px}
+.settings{display:flex;flex-wrap:wrap;gap:8px 12px}.settings label{border:1px solid var(--border);background:#f8fafc;padding:7px 10px;border-radius:8px;font-size:13px}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}button{border:0;border-radius:9px;padding:11px 17px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.gold{background:var(--gold);color:#fff}.secondary{background:#e9eff4;color:var(--navy)}
+.error{display:none;background:#fde9e9;color:#962a2a;border:1px solid #efc7c7;padding:10px 12px;border-radius:8px;margin-top:12px}.note{background:#fff8e7;border-left:4px solid var(--gold);padding:10px 12px;border-radius:6px;font-size:12px;line-height:1.7;margin-top:12px}
+#results{display:none}.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:9px;margin-bottom:15px}.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:13px}.n{font-size:26px;font-weight:800;color:var(--navy)}.l{font-size:11px;color:var(--muted)}.green .n{color:var(--green)}.red .n{color:var(--red)}.yellow .n{color:var(--yellow)}
+.tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}.tab{background:#e9eff4;color:var(--navy);padding:9px 13px}.tab.active{background:var(--navy);color:white}
+.toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.search{padding:10px 12px;border:1px solid var(--border);border-radius:8px;min-width:300px}
+.tablebox{overflow:auto;border:1px solid var(--border);border-radius:10px;max-height:680px}table{border-collapse:collapse;width:100%;min-width:1450px;font-size:12px}th{position:sticky;top:0;background:var(--navy);color:#fff;padding:8px;text-align:left;white-space:nowrap}td{padding:7px 8px;border-bottom:1px solid #edf1f4;vertical-align:top}tr:hover td{background:#f8fbfd}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}.bgreen{background:#e4f5ec;color:#126d43}.bred{background:#fde8e8;color:#a52828}.byellow{background:#fff1d5;color:#925800}.bblue{background:#e7f0fa;color:#1f4e78}.diff{font-weight:700;color:var(--red)}.small{font-size:12px;color:var(--muted)}
+#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#17365d;color:#fff;padding:11px 18px;border-radius:9px;font-weight:700;box-shadow:0 5px 20px rgba(0,0,0,.2);display:none;z-index:9999}
+@media(max-width:850px){.uploads{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}.search{min-width:100%}}
+</style>
+</head>
+<body>
+<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v3.1</p></div></header>
+<div class="wrap">
+<div class="panel">
+<h2>① CSVを2つ選択</h2>
+<div class="uploads">
+ <div class="drop" id="aDrop"><b>📄 MIO変換CSV</b><div class="small">PDF→CSV変換ツールで作ったファイル</div><input id="mioFile" type="file" accept=".csv"><div class="filename" id="aName">未選択</div></div>
+ <div class="drop" id="iDrop"><b>📊 イエラブ統合CSV</b><div class="small">イエラブ側は1ファイルに統合したCSV</div><input id="ieloveFile" type="file" accept=".csv"><div class="filename" id="iName">未選択</div></div>
+</div>
+
+<h2 style="margin-top:18px">② 比較項目</h2>
+<div class="settings">
+<label><input type="checkbox" data-field="rent" checked> 賃料</label>
+<label><input type="checkbox" data-field="management" checked> 共益費・管理費</label>
+<label><input type="checkbox" data-field="water"> 水道料</label>
+<label><input type="checkbox" data-field="guarantee" checked> 保証金</label>
+<label><input type="checkbox" data-field="deposit" checked> 敷金</label>
+<label><input type="checkbox" data-field="keyMoney" checked> 礼金</label>
+<label><input type="checkbox" data-field="insurance"> 保険料</label>
+<label><input type="checkbox" data-field="renewal"> 更新料</label>
+<label><input type="checkbox" data-field="parking" checked> 駐車場月額</label>
+<label><input type="checkbox" data-field="room" checked> 号室</label>
+<label><input type="checkbox" data-field="layout" checked> 間取り</label>
+<label><input type="checkbox" data-field="area" checked> 専有面積</label>
+<label><input type="checkbox" data-field="status" checked> 現況</label>
+<label><input type="checkbox" data-field="name"> 物件名</label>
+</div>
+<div class="actions"><button class="primary" id="runBtn">🔍 照合開始</button><button class="secondary" id="resetBtn">リセット</button></div>
+<div class="error" id="error"></div>
+<div class="note"><b>判定基準：</b> MIOの「物件番号」とイエラブの「管理コード」の10桁番号を照合します。管理コード一致後、チェックした条件を比較します。金額は「6.8万円」「68,000円」「68000」を同じ68,000円として比較します。また、MIOの空欄とイエラブの0・0円・0ヶ月は同じ「なし」として扱います。さらに「1ヶ月」「2ヶ月」等は、その物件の賃料×月数を円換算して比較します。間取りは「SLDK＝LDK+S」「SK＝K+S」を同一表記として扱います（例：2SLDK＝2LDK+S、1SK＝1K+S）。号室は空欄とハイフン（-／‐／－等）を同一扱いにします。駐車場料金は「税込」「税別」などの文字を無視し、「1万1000円」「11,000円」「11000円」などを同じ11,000円として比較します。</div>
+</div>
+
+<div id="results">
+<div class="cards">
+<div class="card"><div class="n" id="aCount">0</div><div class="l">MIO</div></div>
+<div class="card"><div class="n" id="iCount">0</div><div class="l">イエラブ</div></div>
+<div class="card green"><div class="n" id="okCount">0</div><div class="l">一致</div></div>
+<div class="card red"><div class="n" id="missCount">0</div><div class="l">イエラブ未登録</div></div>
+<div class="card yellow"><div class="n" id="diffCount">0</div><div class="l">条件相違</div></div>
+<div class="card"><div class="n" id="extraCount">0</div><div class="l">イエラブのみ</div></div>
+</div>
+
+<div class="panel">
+<div class="tabs">
+<button class="tab active" data-tab="attention">🚨 要確認</button>
+<button class="tab" data-tab="missing">🔴 未登録</button>
+<button class="tab" data-tab="diff">🟡 条件相違</button>
+<button class="tab" data-tab="ok">🟢 一致</button>
+<button class="tab" data-tab="extra">🔵 イエラブのみ</button>
+<button class="tab" data-tab="all">全件</button>
+</div>
+<div class="toolbar"><input id="search" class="search" placeholder="管理コード・物件名・号室・所在地で検索"><div><button class="primary" id="copyMissingBtn">📋 未登録：管理コード＋物件名をコピー</button> <button class="primary" id="copyExtraBtn">📋 イエラブのみ管理コードをコピー</button> <button class="gold" id="xlsxBtn">📥 Excel出力</button><button class="secondary" id="csvBtn">CSV出力</button></div></div>
+<div class="tablebox"><table><thead><tr><th>判定</th><th>管理コード</th><th>物件名</th><th>号室</th><th>相違項目</th><th>MIO</th><th>イエラブ</th><th>所在地</th><th>備考</th></tr></thead><tbody id="body"></tbody></table></div>
+<div class="small" id="rowCount" style="margin-top:8px"></div>
+</div>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let results=[],mio=[],ielove=[],tab="attention";
+const LABEL={rent:"賃料",management:"共益費・管理費",water:"水道料",guarantee:"保証金",deposit:"敷金",keyMoney:"礼金",insurance:"保険料",renewal:"更新料",parking:"駐車場月額",room:"号室",layout:"間取り",area:"専有面積",status:"現況",name:"物件名"};
+function clean(v){v=String(v??"").normalize("NFKC").trim();if(v.startsWith('="')&&v.endsWith('"'))v=v.slice(2,-1);return v.trim()}
+function compact(v){return clean(v).replace(/[ 　\t\r\n]/g,"")}
+function code(v){const m=clean(v).match(/10\d{8}/);return m?m[0]:clean(v)}
+function money(v){
+ let s=compact(v).replace(/税込/g,"");
+
+ // MIO空欄とイエラブの0表記は同じ「なし」として扱う
+ if(!s || s==="-" || s==="—" || s==="0" || s==="0円" || s==="0.0" || s==="0.00" || s==="0ヶ月" || s==="0.0ヶ月" || s==="0.00ヶ月") return "0";
+
+ let m=s.match(/^(\d+(?:\.\d+)?)万円$/);if(m)return String(Math.round(Number(m[1])*10000));
+ m=s.match(/^(\d+)万(?:(\d+))?円?$/);if(m)return String(Number(m[1])*10000+Number(m[2]||0));
+ m=s.match(/^([\d,]+)円?$/);if(m)return String(Number(m[1].replaceAll(",","")));
+ m=s.match(/^(\d+(?:\.\d+)?)ヶ月$/);if(m)return Number(m[1])+"ヶ月";
+ return s;
+}
+function parkingMoney(v){
+ let s=compact(v);
+
+ // 税込・税別などの文字は比較に使わない
+ if(!s || s==="-" || s==="—") return "0";
+ if(/^(0|0円|0ヶ月)$/.test(s)) return "0";
+
+ // 「1万1000円」「1万1,000円」「1万円」「1.1万円」等を円へ統一
+ let m=s.match(/(\d+)万([\d,]+)円?/);
+ if(m){
+   return String(Number(m[1])*10000 + Number(m[2].replaceAll(",","")));
+ }
+ m=s.match(/(\d+(?:\.\d+)?)万円?/);
+ if(m){
+   return String(Math.round(Number(m[1])*10000));
+ }
+
+ // 「11,000円(税込)」「11000円」等
+ m=s.match(/([\d,]+)円?/);
+ if(m) return String(Number(m[1].replaceAll(",","")));
+
+ return "0";
+}
+function area(v){const m=compact(v).match(/(\d+(?:\.\d+)?)/);return m?Number(m[1]):null}
+function room(v){
+ let s=compact(v).replace(/\((公開|非公開)\)/g,"").replace(/号室$/,"").toUpperCase();
+ // 号室は空欄・各種ハイフンを同じ「なし」として扱う
+ if(!s || s==="-" || s==="‐" || s==="－" || s==="—" || s==="–" || s==="―") return "";
+ return s;
+}
+function layout(v){
+ let s=compact(v).toUpperCase();
+
+ // 補足表記を除去（例：2LDK+S(納戸)）
+ s=s.replace(/\([^)]*\)/g,"");
+
+ // SLDK系：2SLDK = 2LDK+S
+ let m=s.match(/^(\d+)LDK\+S$/);
+ if(m) return m[1]+"SLDK";
+ m=s.match(/^(\d+)SLDK$/);
+ if(m) return m[1]+"SLDK";
+ m=s.match(/^(\d+)S\+?LDK$/);
+ if(m) return m[1]+"SLDK";
+
+ // SK系：1SK = 1K+S
+ m=s.match(/^(\d+)K\+S$/);
+ if(m) return m[1]+"SK";
+ m=s.match(/^(\d+)SK$/);
+ if(m) return m[1]+"SK";
+ m=s.match(/^(\d+)S\+?K$/);
+ if(m) return m[1]+"SK";
+
+ return s;
+}
+function status(v){const s=compact(v);if(["空室","空家","空き","即入居可"].some(x=>s.includes(x)))return"空室";if(s.includes("入居中"))return"入居中";if(s.includes("退去予定"))return"退去予定";return s}
+function name(v){return compact(v).replace(/\((公開|非公開)\)/g,"").replace(/[・･]/g,"・").toLowerCase()}
+function moneyWithRent(v,rentValue){
+ const s=compact(v).replace(/税込/g,"");
+ // 「1ヶ月」「2ヶ月」等はその物件の賃料×月数を円換算
+ const m=s.match(/^(\d+(?:\.\d+)?)ヶ月$/);
+ if(m){
+   const base=Number(money(rentValue));
+   if(Number.isFinite(base)) return String(Math.round(base*Number(m[1])));
+ }
+ return money(v);
+}
+function eq(f,a,b,aRow,bRow){
+ if(["rent","management","water","guarantee","deposit","keyMoney","insurance","renewal","parking"].includes(f)){
+   if(f==="parking"){
+     return parkingMoney(a)===parkingMoney(b);
+   }
+   const av=(f==="rent")?money(a):moneyWithRent(a,aRow?.rent);
+   const bv=(f==="rent")?money(b):moneyWithRent(b,bRow?.rent);
+   return av===bv;
+ }
+ if(f==="area"){const x=area(a),y=area(b);return x!=null&&y!=null?Math.abs(x-y)<0.02:compact(a)===compact(b)}
+ if(f==="room")return room(a)===room(b);if(f==="layout")return layout(a)===layout(b);if(f==="status")return status(a)===status(b);if(f==="name")return name(a)===name(b);return compact(a)===compact(b)
+}
+function val(f,v,row){
+ if(["rent","management","water","guarantee","deposit","keyMoney","insurance","renewal","parking"].includes(f)){
+   const x=f==="parking" ? parkingMoney(v) : (f==="rent"?money(v):moneyWithRent(v,row?.rent));
+   return /^\d+$/.test(x)?Number(x).toLocaleString()+"円":x
+ }
+ return clean(v)
+}
+function findHeader(o,names){for(const n of names)if(Object.prototype.hasOwnProperty.call(o,n))return o[n];return""}
+function parseMio(data){return data.map(o=>({code:code(findHeader(o,["物件番号"])),name:findHeader(o,["物件名"]),room:findHeader(o,["号室"]),status:findHeader(o,["現況"]),layout:findHeader(o,["間取","間取り"]),area:findHeader(o,["専有","専有面積"]),rent:findHeader(o,["賃料"]),management:findHeader(o,["共益費","管理費"]),water:findHeader(o,["水道料"]),guarantee:findHeader(o,["保証金"]),deposit:findHeader(o,["敷金"]),keyMoney:findHeader(o,["礼金"]),insurance:findHeader(o,["保険料"]),renewal:findHeader(o,["更新料"]),parking:findHeader(o,["駐車場月額"])})).filter(r=>/^10\d{8}$/.test(r.code))}
+function parseIelove(data){return data.map(o=>({code:code(findHeader(o,["管理コード"])),name:findHeader(o,["物件名"]),room:findHeader(o,["空き物件内容（部屋番号）","空き物件内容(部屋番号)","部屋番号"]),status:findHeader(o,["現況"]),layout:findHeader(o,["間取り"]),area:findHeader(o,["平米数","専有面積"]),rent:findHeader(o,["賃料"]),management:findHeader(o,["管理費","共益費"]),water:findHeader(o,["水道料"]),guarantee:findHeader(o,["保証金"]),deposit:findHeader(o,["敷金"]),keyMoney:findHeader(o,["礼金"]),insurance:findHeader(o,["保険料"]),renewal:findHeader(o,["更新料"]),parking:findHeader(o,["駐車場料金","駐車場月額"]),address:findHeader(o,["所在地"])})).filter(r=>r.code)}
+async function readCsv(file){
+ const buf=await file.arrayBuffer();let text=new TextDecoder("shift-jis").decode(buf);
+ let p=Papa.parse(text,{header:true,skipEmptyLines:true});
+ if(!p.meta.fields?.length || p.meta.fields.some(x=>x.includes("�"))){text=new TextDecoder("utf-8").decode(buf);p=Papa.parse(text,{header:true,skipEmptyLines:true})}
+ const rows=p.data.map(o=>{const n={};Object.keys(o).forEach(k=>n[clean(k)]=clean(o[k]));return n});return rows
+}
+function fields(){return[...document.querySelectorAll("[data-field]:checked")].map(x=>x.dataset.field)}
+function compare(){
+ const map=new Map();ielove.forEach(r=>{if(!map.has(r.code))map.set(r.code,[]);map.get(r.code).push(r)});
+ const mCodes=new Set(mio.map(r=>r.code));const out=[];
+ for(const a of mio){
+   const ms=map.get(a.code)||[];
+   if(!ms.length){out.push({type:"missing",code:a.code,name:a.name,room:a.room,address:"",diff:[],a:"",i:"",note:"MIOにはあるがイエラブ管理コードに一致なし"});continue}
+   let i=ms.find(x=>room(x.room)===room(a.room))||ms[0];
+   const ds=fields().filter(f=>!eq(f,a[f],i[f],a,i));
+   if(ds.length)out.push({type:"diff",code:a.code,name:i.name||a.name,room:i.room||a.room,address:i.address||"",diff:ds.map(f=>LABEL[f]),a:ds.map(f=>`${LABEL[f]}：${val(f,a[f],a)}`).join(" / "),i:ds.map(f=>`${LABEL[f]}：${val(f,i[f],i)}`).join(" / "),note:"管理コード一致・条件相違"});
+   else out.push({type:"ok",code:a.code,name:i.name||a.name,room:i.room||a.room,address:i.address||"",diff:[],a:"",i:"",note:"管理コード・選択条件一致"});
+ }
+ for(const i of ielove){if(/^10\d{8}$/.test(i.code)&&!mCodes.has(i.code))out.push({type:"extra",code:i.code,name:i.name,room:i.room,address:i.address||"",diff:[],a:"",i:"",note:"イエラブにはあるがMIOに物件番号なし"})}
+ return out
+}
+function badge(t){return t==="ok"?'<span class="badge bgreen">一致</span>':t==="missing"?'<span class="badge bred">未登録</span>':t==="diff"?'<span class="badge byellow">条件相違</span>':'<span class="badge bblue">イエラブのみ</span>'}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function visible(){const q=compact($("search").value).toLowerCase();return results.filter(r=>{const t=tab==="all"||tab===r.type||(tab==="attention"&&(r.type==="missing"||r.type==="diff"));return t&&(!q||compact([r.code,r.name,r.room,r.address,r.note,r.diff.join(" ")].join(" ")).toLowerCase().includes(q))})}
+function render(){const rs=visible();$("body").innerHTML=rs.map(r=>`<tr><td>${badge(r.type)}</td><td><b>${esc(r.code)}</b></td><td>${esc(r.name)}</td><td>${esc(r.room)}</td><td class="${r.type==="diff"?"diff":""}">${esc(r.diff.join(" / "))}</td><td>${esc(r.a)}</td><td>${esc(r.i)}</td><td>${esc(r.address)}</td><td>${esc(r.note)}</td></tr>`).join("");$("rowCount").textContent=`${rs.length}件表示 / 全${results.length}件`}
+function summary(){$("aCount").textContent=mio.length;$("iCount").textContent=ielove.length;$("okCount").textContent=results.filter(r=>r.type==="ok").length;$("missCount").textContent=results.filter(r=>r.type==="missing").length;$("diffCount").textContent=results.filter(r=>r.type==="diff").length;$("extraCount").textContent=results.filter(r=>r.type==="extra").length}
+async function run(){ $("error").style.display="none";const af=$("mioFile").files[0],ifile=$("ieloveFile").files[0];if(!af||!ifile){$("error").style.display="block";$("error").textContent="MIO CSVとイエラブCSVを両方選択してください。";return}try{mio=parseMio(await readCsv(af));ielove=parseIelove(await readCsv(ifile));if(!mio.length)throw new Error("MIO CSVから10桁の物件番号を読み取れませんでした");if(!ielove.length)throw new Error("イエラブCSVを読み取れませんでした");results=compare();summary();tab="attention";document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="attention"));render();$("results").style.display="block";$("results").scrollIntoView({behavior:"smooth"})}catch(e){$("error").style.display="block";$("error").textContent="照合できませんでした："+e.message}}
+function expRows(rs=results){return rs.map(r=>({"判定":r.type==="ok"?"一致":r.type==="missing"?"未登録":r.type==="diff"?"条件相違":"イエラブのみ","管理コード":r.code,"物件名":r.name,"号室":r.room,"所在地":r.address,"相違項目":r.diff.join(" / "),"MIO":r.a,"イエラブ":r.i,"備考":r.note}))}
+function xlsx(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["項目","件数"],["MIO",mio.length],["イエラブ",ielove.length],["一致",results.filter(r=>r.type==="ok").length],["未登録",results.filter(r=>r.type==="missing").length],["条件相違",results.filter(r=>r.type==="diff").length],["イエラブのみ",results.filter(r=>r.type==="extra").length]]),"サマリー");[["要確認",results.filter(r=>["missing","diff"].includes(r.type))],["未登録",results.filter(r=>r.type==="missing")],["条件相違",results.filter(r=>r.type==="diff")],["一致",results.filter(r=>r.type==="ok")],["イエラブのみ",results.filter(r=>r.type==="extra")],["全件",results]].forEach(([n,r])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(expRows(r)),n));XLSX.writeFile(wb,`MIO_イエラブ照合_${new Date().toISOString().slice(0,10).replaceAll("-","")}.xlsx`)}
+function csv(){const s=Papa.unparse(expRows());const b=new Blob(["\uFEFF"+s],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="MIO_イエラブ照合.csv";a.click();URL.revokeObjectURL(a.href)}
+function toast(msg){const t=$("toast");t.textContent=msg;t.style.display="block";clearTimeout(window._toastTimer);window._toastTimer=setTimeout(()=>t.style.display="none",2200)}
+async function copyExtrmCodes(){
+ const codes=[...new Set(results.filter(r=>r.type==="extra").map(r=>r.code).filter(Boolean))];
+ if(!codes.length){toast("イエラブのみの管理コードはありません");return}
+ const text=codes.join("\n");
+ try{
+   await navigator.clipboard.writeText(text);
+ }catch(e){
+   const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();
+ }
+ toast(`イエラブのみ ${codes.length}件の管理コードをコピーしました`);
+}
+async function copyMissingRows(){
+ const rows=results.filter(r=>r.type==="missing");
+ if(!rows.length){toast("未登録物件はありません");return}
+ const seen=new Set();
+ const lines=[];
+ for(const r of rows){
+   const key=r.code+"\t"+r.name;
+   if(seen.has(key)) continue;
+   seen.add(key);
+   lines.push(`${r.code}\t${r.name}`);
+ }
+ const text=lines.join("\n");
+ try{
+   await navigator.clipboard.writeText(text);
+ }catch(e){
+   const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();
+ }
+ toast(`未登録 ${lines.length}件の管理コード＋物件名をコピーしました`);
+}
+$("runBtn").onclick=run;$("xlsxBtn").onclick=xlsx;$("csvBtn").onclick=csv;$("copyExtraBtn").onclick=copyExtrmCodes;$("copyMissingBtn").onclick=copyMissingRows;$("search").oninput=render;
+document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>{tab=x.dataset.tab;document.querySelectorAll(".tab").forEach(y=>y.classList.toggle("active",x===y));render()});
+[["mioFile","aName"],["ieloveFile","iName"]].forEach(([f,n])=>$(f).onchange=e=>$(n).textContent=e.target.files[0]?.name||"未選択");
+$("resetBtn").onclick=()=>location.reload();
+function drop(id,input){const d=$(id);["dragenter","dragover"].forEach(e=>d.addEventListener(e,x=>{x.preventDefault();d.classList.add("drag")}));["dragleave","drop"].forEach(e=>d.addEventListener(e,x=>{x.preventDefault();d.classList.remove("drag")}));d.addEventListener("drop",e=>{const f=[...e.dataTransfer.files].find(x=>x.name.toLowerCase().endsWith(".csv"));if(!f)return;const dt=new DataTransfer();dt.items.add(f);$(input).files=dt.files;$(input).dispatchEvent(new Event("change"))})}
+drop("aDrop","mioFile");drop("iDrop","ieloveFile");
+</script>
+<div id="toast"></div></body></html>
