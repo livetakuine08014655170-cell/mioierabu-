@@ -28,7 +28,7 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 </style>
 </head>
 <body>
-<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v3.7</p></div></header>
+<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v3.9</p></div></header>
 <div class="wrap">
 <div class="panel">
 <h2>① CSVを2つ選択</h2>
@@ -104,6 +104,17 @@ function money(v){
  m=s.match(/^(\d+(?:\.\d+)?)ヶ月$/);if(m)return Number(m[1])+"ヶ月";
  return s;
 }
+function mioParkingDisplay(row){
+ const fee=clean(row?.parking);
+ if(!fee || fee==="-" || fee==="—" || fee==="0" || fee==="0円") return fee;
+ const raw=compact(row?.parkingStatus);
+ let st="";
+ if(raw.includes("近隣")) st="近隣";
+ else if(raw.includes("空あり") || raw.includes("空有") || raw.includes("空きあり") || raw.includes("空有り")) st="空あり";
+ const amount=parkingMoney(fee);
+ const yen=/^\d+$/.test(amount)?Number(amount).toLocaleString()+"円":fee;
+ return st ? `${yen}（${st}）` : yen;
+}
 function parkingMoney(v){
  let s=compact(v);
 
@@ -159,7 +170,7 @@ function layout(v){
  return s;
 }
 function status(v){const s=compact(v);if(["空室","空家","空き","即入居可"].some(x=>s.includes(x)))return"空室";if(s.includes("入居中"))return"入居中";if(s.includes("退去予定"))return"退去予定";return s}
-function name(v){return compact(v).replace(/\((公開|非公開)\)/g,"").replace(/[・･]/g,"・").toLowerCase()}
+function name(v){return compact(v).replace(/[（(](公開|非公開)[）)]/g,"").replace(/[・･]/g,"・").toLowerCase()}
 function moneyWithRent(v,rentValue){
  const s=compact(v).replace(/税込/g,"");
  // 「1ヶ月」「2ヶ月」等はその物件の賃料×月数を円換算
@@ -190,8 +201,8 @@ function val(f,v,row){
  return clean(v)
 }
 function findHeader(o,names){for(const n of names)if(Object.prototype.hasOwnProperty.call(o,n))return o[n];return""}
-function parseMio(data){return data.map(o=>({code:code(findHeader(o,["物件番号"])),name:findHeader(o,["物件名"]),room:findHeader(o,["号室"]),status:findHeader(o,["現況"]),layout:findHeader(o,["間取","間取り"]),area:findHeader(o,["専有","専有面積"]),rent:findHeader(o,["賃料"]),management:findHeader(o,["共益費","管理費"]),water:findHeader(o,["水道料"]),guarantee:findHeader(o,["保証金"]),deposit:findHeader(o,["敷金"]),keyMoney:findHeader(o,["礼金"]),insurance:findHeader(o,["保険料"]),renewal:findHeader(o,["更新料"]),parking:findHeader(o,["駐車場月額"])})).filter(r=>/^10\d{8}$/.test(r.code))}
-function parseIelove(data){return data.map(o=>({code:code(findHeader(o,["管理コード"])),name:findHeader(o,["物件名"]),room:findHeader(o,["空き物件内容（部屋番号）","空き物件内容(部屋番号)","部屋番号"]),status:findHeader(o,["現況"]),layout:findHeader(o,["間取り"]),area:findHeader(o,["平米数","専有面積"]),rent:findHeader(o,["賃料"]),management:findHeader(o,["管理費","共益費"]),water:findHeader(o,["水道料"]),guarantee:findHeader(o,["保証金"]),deposit:findHeader(o,["敷金"]),keyMoney:findHeader(o,["礼金"]),insurance:findHeader(o,["保険料"]),renewal:findHeader(o,["更新料"]),parking:findHeader(o,["駐車場料金","駐車場月額"]),address:findHeader(o,["所在地"])})).filter(r=>r.code)}
+function parseMio(data){return data.map(o=>({code:code(findHeader(o,["物件番号"])),name:clean(findHeader(o,["物件名"])).replace(/[（(]公開[）)]/g,"").replace(/[（(]非公開[）)]/g,""),room:findHeader(o,["号室"]),status:findHeader(o,["現況"]),layout:findHeader(o,["間取","間取り"]),area:findHeader(o,["専有","専有面積"]),rent:findHeader(o,["賃料"]),management:findHeader(o,["共益費","管理費"]),water:findHeader(o,["水道料"]),guarantee:findHeader(o,["保証金"]),deposit:findHeader(o,["敷金"]),keyMoney:findHeader(o,["礼金"]),insurance:findHeader(o,["保険料"]),renewal:findHeader(o,["更新料"]),parking:findHeader(o,["駐車場月額"]),parkingStatus:findHeader(o,["駐車場"])})).filter(r=>/^10\d{8}$/.test(r.code))}
+function parseIelove(data){return data.map(o=>({code:code(findHeader(o,["管理コード"])),name:clean(findHeader(o,["物件名"])).replace(/[（(]公開[）)]/g,"").replace(/[（(]非公開[）)]/g,""),room:findHeader(o,["空き物件内容（部屋番号）","空き物件内容(部屋番号)","部屋番号"]),status:findHeader(o,["現況"]),layout:findHeader(o,["間取り"]),area:findHeader(o,["平米数","専有面積"]),rent:findHeader(o,["賃料"]),management:findHeader(o,["管理費","共益費"]),water:findHeader(o,["水道料"]),guarantee:findHeader(o,["保証金"]),deposit:findHeader(o,["敷金"]),keyMoney:findHeader(o,["礼金"]),insurance:findHeader(o,["保険料"]),renewal:findHeader(o,["更新料"]),parking:findHeader(o,["駐車場料金","駐車場月額"]),address:findHeader(o,["所在地"])})).filter(r=>r.code)}
 async function readCsv(file){
  const buf=await file.arrayBuffer();let text=new TextDecoder("shift-jis").decode(buf);
  let p=Papa.parse(text,{header:true,skipEmptyLines:true});
@@ -204,10 +215,10 @@ function compare(){
  const mCodes=new Set(mio.map(r=>r.code));const out=[];
  for(const a of mio){
    const ms=map.get(a.code)||[];
-   if(!ms.length){out.push({type:"missing",code:a.code,name:a.name,room:a.room,address:"",diff:[],a:"",i:"",note:"MIOにはあるがイエラブ管理コードに一致なし"});continue}
+   if(!ms.length){out.push({type:"missing",code:a.code,name:a.name,room:a.room,address:"",diff:[],a:"",i:"",note:"MIOにはあるがイエラブ管理コードに一致なし"+(a.parking&&parkingMoney(a.parking)!=="0"?` / 駐車場：${mioParkingDisplay(a)}`:"")});continue}
    let i=ms.find(x=>room(x.room)===room(a.room))||ms[0];
    const ds=fields().filter(f=>!eq(f,a[f],i[f],a,i));
-   if(ds.length)out.push({type:"diff",code:a.code,name:i.name||a.name,room:i.room||a.room,address:i.address||"",diff:ds.map(f=>LABEL[f]),a:ds.map(f=>`${LABEL[f]}：${val(f,a[f],a)}`).join(" / "),i:ds.map(f=>`${LABEL[f]}：${val(f,i[f],i)}`).join(" / "),note:"管理コード一致・条件相違"});
+   if(ds.length)out.push({type:"diff",code:a.code,name:i.name||a.name,room:i.room||a.room,address:i.address||"",diff:ds.map(f=>LABEL[f]),a:ds.map(f=>`${LABEL[f]}：${f==="parking"?mioParkingDisplay(a):val(f,a[f],a)}`).join(" / "),i:ds.map(f=>`${LABEL[f]}：${val(f,i[f],i)}`).join(" / "),note:"管理コード一致・条件相違"});
    else out.push({type:"ok",code:a.code,name:i.name||a.name,room:i.room||a.room,address:i.address||"",diff:[],a:"",i:"",note:"管理コード・選択条件一致"});
  }
  for(const i of ielove){if(/^10\d{8}$/.test(i.code)&&!mCodes.has(i.code))out.push({type:"extra",code:i.code,name:i.name,room:i.room,address:i.address||"",diff:[],a:"",i:"",note:"イエラブにはあるがMIOに物件番号なし"})}
