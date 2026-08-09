@@ -28,7 +28,7 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 </style>
 </head>
 <body>
-<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v3.1</p></div></header>
+<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v3.7</p></div></header>
 <div class="wrap">
 <div class="panel">
 <h2>① CSVを2つ選択</h2>
@@ -78,7 +78,7 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 <button class="tab" data-tab="extra">🔵 イエラブのみ</button>
 <button class="tab" data-tab="all">全件</button>
 </div>
-<div class="toolbar"><input id="search" class="search" placeholder="管理コード・物件名・号室・所在地で検索"><div><button class="primary" id="copyMissingBtn">📋 未登録：管理コード＋物件名をコピー</button> <button class="primary" id="copyExtraBtn">📋 イエラブのみ管理コードをコピー</button> <button class="gold" id="xlsxBtn">📥 Excel出力</button><button class="secondary" id="csvBtn">CSV出力</button></div></div>
+<div class="toolbar"><input id="search" class="search" placeholder="管理コード・物件名・号室・所在地で検索"><div><button class="gold" id="xlsxBtn">📥 Excel出力</button><button class="secondary" id="csvBtn">CSV出力</button></div></div>
 <div class="tablebox"><table><thead><tr><th>判定</th><th>管理コード</th><th>物件名</th><th>号室</th><th>相違項目</th><th>MIO</th><th>イエラブ</th><th>所在地</th><th>備考</th></tr></thead><tbody id="body"></tbody></table></div>
 <div class="small" id="rowCount" style="margin-top:8px"></div>
 </div>
@@ -216,44 +216,81 @@ function compare(){
 function badge(t){return t==="ok"?'<span class="badge bgreen">一致</span>':t==="missing"?'<span class="badge bred">未登録</span>':t==="diff"?'<span class="badge byellow">条件相違</span>':'<span class="badge bblue">イエラブのみ</span>'}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function visible(){const q=compact($("search").value).toLowerCase();return results.filter(r=>{const t=tab==="all"||tab===r.type||(tab==="attention"&&(r.type==="missing"||r.type==="diff"));return t&&(!q||compact([r.code,r.name,r.room,r.address,r.note,r.diff.join(" ")].join(" ")).toLowerCase().includes(q))})}
-function render(){const rs=visible();$("body").innerHTML=rs.map(r=>`<tr><td>${badge(r.type)}</td><td><b>${esc(r.code)}</b></td><td>${esc(r.name)}</td><td>${esc(r.room)}</td><td class="${r.type==="diff"?"diff":""}">${esc(r.diff.join(" / "))}</td><td>${esc(r.a)}</td><td>${esc(r.i)}</td><td>${esc(r.address)}</td><td>${esc(r.note)}</td></tr>`).join("");$("rowCount").textContent=`${rs.length}件表示 / 全${results.length}件`}
+function render(){
+ const rs=visible();
+ $("body").innerHTML=rs.map(r=>{
+   const canCopy=(r.type!=="ok");
+   const codeCell=canCopy
+     ? `<b>${esc(r.code)}</b> <button type="button" class="secondary copyCodeBtn" style="padding:4px 7px;margin-left:4px;font-size:11px;white-space:nowrap" data-code="${esc(r.code)}">📋</button>`
+     : `<b>${esc(r.code)}</b>`;
+   const nameCell=canCopy
+     ? `${esc(r.name)} <button type="button" class="secondary copyNameBtn" style="padding:4px 7px;margin-left:4px;font-size:11px;white-space:nowrap" data-name="${esc(r.name)}">📋</button>`
+     : `${esc(r.name)}`;
+
+   return `<tr>
+     <td>${badge(r.type)}</td>
+     <td>${codeCell}</td>
+     <td>${nameCell}</td>
+     <td>${esc(r.room)}</td>
+     <td class="${r.type==="diff"?"diff":""}">${esc(r.diff.join(" / "))}</td>
+     <td>${esc(r.a)}</td>
+     <td>${esc(r.i)}</td>
+     <td>${esc(r.address)}</td>
+     <td>${esc(r.note)}</td>
+   </tr>`;
+ }).join("");
+
+ document.querySelectorAll(".copyCodeBtn").forEach(btn=>{
+   btn.onclick=()=>copyTextReliable(btn.getAttribute("data-code"),"管理コード");
+ });
+ document.querySelectorAll(".copyNameBtn").forEach(btn=>{
+   btn.onclick=()=>copyTextReliable(btn.getAttribute("data-name"),"物件名");
+ });
+
+ $("rowCount").textContent=`${rs.length}件表示 / 全${results.length}件`;
+}
 function summary(){$("aCount").textContent=mio.length;$("iCount").textContent=ielove.length;$("okCount").textContent=results.filter(r=>r.type==="ok").length;$("missCount").textContent=results.filter(r=>r.type==="missing").length;$("diffCount").textContent=results.filter(r=>r.type==="diff").length;$("extraCount").textContent=results.filter(r=>r.type==="extra").length}
 async function run(){ $("error").style.display="none";const af=$("mioFile").files[0],ifile=$("ieloveFile").files[0];if(!af||!ifile){$("error").style.display="block";$("error").textContent="MIO CSVとイエラブCSVを両方選択してください。";return}try{mio=parseMio(await readCsv(af));ielove=parseIelove(await readCsv(ifile));if(!mio.length)throw new Error("MIO CSVから10桁の物件番号を読み取れませんでした");if(!ielove.length)throw new Error("イエラブCSVを読み取れませんでした");results=compare();summary();tab="attention";document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="attention"));render();$("results").style.display="block";$("results").scrollIntoView({behavior:"smooth"})}catch(e){$("error").style.display="block";$("error").textContent="照合できませんでした："+e.message}}
 function expRows(rs=results){return rs.map(r=>({"判定":r.type==="ok"?"一致":r.type==="missing"?"未登録":r.type==="diff"?"条件相違":"イエラブのみ","管理コード":r.code,"物件名":r.name,"号室":r.room,"所在地":r.address,"相違項目":r.diff.join(" / "),"MIO":r.a,"イエラブ":r.i,"備考":r.note}))}
 function xlsx(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["項目","件数"],["MIO",mio.length],["イエラブ",ielove.length],["一致",results.filter(r=>r.type==="ok").length],["未登録",results.filter(r=>r.type==="missing").length],["条件相違",results.filter(r=>r.type==="diff").length],["イエラブのみ",results.filter(r=>r.type==="extra").length]]),"サマリー");[["要確認",results.filter(r=>["missing","diff"].includes(r.type))],["未登録",results.filter(r=>r.type==="missing")],["条件相違",results.filter(r=>r.type==="diff")],["一致",results.filter(r=>r.type==="ok")],["イエラブのみ",results.filter(r=>r.type==="extra")],["全件",results]].forEach(([n,r])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(expRows(r)),n));XLSX.writeFile(wb,`MIO_イエラブ照合_${new Date().toISOString().slice(0,10).replaceAll("-","")}.xlsx`)}
 function csv(){const s=Papa.unparse(expRows());const b=new Blob(["\uFEFF"+s],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="MIO_イエラブ照合.csv";a.click();URL.revokeObjectURL(a.href)}
 function toast(msg){const t=$("toast");t.textContent=msg;t.style.display="block";clearTimeout(window._toastTimer);window._toastTimer=setTimeout(()=>t.style.display="none",2200)}
-async function copyExtrmCodes(){
- const codes=[...new Set(results.filter(r=>r.type==="extra").map(r=>r.code).filter(Boolean))];
- if(!codes.length){toast("イエラブのみの管理コードはありません");return}
- const text=codes.join("\n");
- try{
-   await navigator.clipboard.writeText(text);
- }catch(e){
-   const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();
+
+function copyTextReliable(text,label){
+ text=String(text??"");
+ if(!text){toast(`${label}が空欄です`);return;}
+
+ // file:// や埋め込み表示でも動きやすいよう、まず古典的コピー方式を試す
+ const ta=document.createElement("textarea");
+ ta.value=text;
+ ta.setAttribute("readonly","");
+ ta.style.position="fixed";
+ ta.style.left="-9999px";
+ ta.style.top="0";
+ document.body.appendChild(ta);
+ ta.focus();
+ ta.select();
+ ta.setSelectionRange(0,ta.value.length);
+
+ let ok=false;
+ try{ ok=document.execCommand("copy"); }catch(e){ ok=false; }
+ ta.remove();
+
+ if(ok){
+   toast(`${label}「${text}」をコピーしました`);
+   return;
  }
- toast(`イエラブのみ ${codes.length}件の管理コードをコピーしました`);
+
+ // execCommandが不可の場合のみClipboard APIへ
+ if(navigator.clipboard && window.isSecureContext){
+   navigator.clipboard.writeText(text)
+     .then(()=>toast(`${label}「${text}」をコピーしました`))
+     .catch(()=>toast("コピーできませんでした。ブラウザの権限をご確認ください"));
+ }else{
+   toast("コピーできませんでした。ブラウザの権限をご確認ください");
+ }
 }
-async function copyMissingRows(){
- const rows=results.filter(r=>r.type==="missing");
- if(!rows.length){toast("未登録物件はありません");return}
- const seen=new Set();
- const lines=[];
- for(const r of rows){
-   const key=r.code+"\t"+r.name;
-   if(seen.has(key)) continue;
-   seen.add(key);
-   lines.push(`${r.code}\t${r.name}`);
- }
- const text=lines.join("\n");
- try{
-   await navigator.clipboard.writeText(text);
- }catch(e){
-   const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();
- }
- toast(`未登録 ${lines.length}件の管理コード＋物件名をコピーしました`);
-}
-$("runBtn").onclick=run;$("xlsxBtn").onclick=xlsx;$("csvBtn").onclick=csv;$("copyExtraBtn").onclick=copyExtrmCodes;$("copyMissingBtn").onclick=copyMissingRows;$("search").oninput=render;
+$("runBtn").onclick=run;$("xlsxBtn").onclick=xlsx;$("csvBtn").onclick=csv;$("search").oninput=render;
 document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>{tab=x.dataset.tab;document.querySelectorAll(".tab").forEach(y=>y.classList.toggle("active",x===y));render()});
 [["mioFile","aName"],["ieloveFile","iName"]].forEach(([f,n])=>$(f).onchange=e=>$(n).textContent=e.target.files[0]?.name||"未選択");
 $("resetBtn").onclick=()=>location.reload();
