@@ -28,7 +28,7 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 </style>
 </head>
 <body>
-<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v3.9</p></div></header>
+<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v4.0</p></div></header>
 <div class="wrap">
 <div class="panel">
 <h2>① CSVを2つ選択</h2>
@@ -166,6 +166,14 @@ function layout(v){
  if(m) return m[1]+"SK";
  m=s.match(/^(\d+)S\+?K$/);
  if(m) return m[1]+"SK";
+
+ // SDK系：1SDK = 1DK+S
+ m=s.match(/^(\d+)DK\+S$/);
+ if(m) return m[1]+"SDK";
+ m=s.match(/^(\d+)SDK$/);
+ if(m) return m[1]+"SDK";
+ m=s.match(/^(\d+)S\+?DK$/);
+ if(m) return m[1]+"SDK";
 
  return s;
 }
