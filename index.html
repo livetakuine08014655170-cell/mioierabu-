@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MIO ⇔ イエラブ CSV照合ツール</title>
+<title>MIO PDF → CSV → イエラブ照合ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -17,7 +18,7 @@ h2{margin:0 0 14px;font-size:18px;color:var(--navy)}
 input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(--blue);margin-top:8px}
 .settings{display:flex;flex-wrap:wrap;gap:8px 12px}.settings label{border:1px solid var(--border);background:#f8fafc;padding:7px 10px;border-radius:8px;font-size:13px}
 .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}button{border:0;border-radius:9px;padding:11px 17px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.gold{background:var(--gold);color:#fff}.secondary{background:#e9eff4;color:var(--navy)}
-.error{display:none;background:#fde9e9;color:#962a2a;border:1px solid #efc7c7;padding:10px 12px;border-radius:8px;margin-top:12px}.note{background:#fff8e7;border-left:4px solid var(--gold);padding:10px 12px;border-radius:6px;font-size:12px;line-height:1.7;margin-top:12px}
+.progress-wrap{display:none;margin-top:14px}.progress{height:10px;background:#e8edf2;border-radius:99px;overflow:hidden}.progress div{height:100%;width:0;background:linear-gradient(90deg,var(--gold),#e1bf67);transition:.2s}#progressText{font-size:12px;color:var(--muted);margin-top:6px}.convert-ok{display:none;margin-top:12px;padding:10px 12px;background:#e4f5ec;color:#126d43;border:1px solid #bfe5d1;border-radius:8px;font-weight:700}.error{display:none;background:#fde9e9;color:#962a2a;border:1px solid #efc7c7;padding:10px 12px;border-radius:8px;margin-top:12px}.note{background:#fff8e7;border-left:4px solid var(--gold);padding:10px 12px;border-radius:6px;font-size:12px;line-height:1.7;margin-top:12px}
 #results{display:none}.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:9px;margin-bottom:15px}.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:13px}.n{font-size:26px;font-weight:800;color:var(--navy)}.l{font-size:11px;color:var(--muted)}.green .n{color:var(--green)}.red .n{color:var(--red)}.yellow .n{color:var(--yellow)}
 .tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}.tab{background:#e9eff4;color:var(--navy);padding:9px 13px}.tab.active{background:var(--navy);color:white}
 .toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.search{padding:10px 12px;border:1px solid var(--border);border-radius:8px;min-width:300px}
@@ -28,13 +29,13 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 </style>
 </head>
 <body>
-<header><div class="inner"><h1>🏠 MIO ⇔ イエラブ CSV照合ツール</h1><p>MIO変換CSV 1個 ＋ イエラブ統合CSV 1個を比較します。v4.0</p></div></header>
+<header><div class="inner"><h1>🏠 MIO PDF → CSV → イエラブ照合ツール</h1><p>① MIO PDFをCSVデータ化 → ② 完成済みCSV⇔CSVロジックでイエラブと照合します。v5.2</p></div></header>
 <div class="wrap">
 <div class="panel">
-<h2>① CSVを2つ選択</h2>
+<h2>① MIO PDFをCSVデータに変換</h2>
 <div class="uploads">
- <div class="drop" id="aDrop"><b>📄 MIO変換CSV</b><div class="small">PDF→CSV変換ツールで作ったファイル</div><input id="mioFile" type="file" accept=".csv"><div class="filename" id="aName">未選択</div></div>
- <div class="drop" id="iDrop"><b>📊 イエラブ統合CSV</b><div class="small">イエラブ側は1ファイルに統合したCSV</div><input id="ieloveFile" type="file" accept=".csv"><div class="filename" id="iName">未選択</div></div>
+ <div class="drop" id="aDrop"><b>📄 MIO PDF</b><div class="small">完成済みのPDF→CSV変換処理をそのまま使用します。</div><input id="mioPdfFile" type="file" accept=".pdf,application/pdf"><div class="filename" id="aName">未選択</div></div>
+ <div class="drop" id="iDrop"><b>📊 イエラブ統合CSV</b><div class="small">MIOのCSV化完了後に一致判定します。</div><input id="ieloveFile" type="file" accept=".csv"><div class="filename" id="iName">未選択</div></div>
 </div>
 
 <h2 style="margin-top:18px">② 比較項目</h2>
@@ -54,9 +55,16 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 <label><input type="checkbox" data-field="status" checked> 現況</label>
 <label><input type="checkbox" data-field="name"> 物件名</label>
 </div>
-<div class="actions"><button class="primary" id="runBtn">🔍 照合開始</button><button class="secondary" id="resetBtn">リセット</button></div>
+<div class="actions">
+<button class="primary" id="convertBtn">① PDF → CSV変換</button>
+<button class="gold" id="runBtn" disabled>② 一致判定</button>
+<button class="secondary" id="saveMioCsvBtn" disabled>変換CSVを保存</button>
+<button class="secondary" id="resetBtn">リセット</button>
+</div>
+<div class="progress-wrap" id="progressWrap"><div class="progress"><div id="progressBar"></div></div><div id="progressText">準備中...</div></div>
+<div class="convert-ok" id="convertOk"></div>
 <div class="error" id="error"></div>
-<div class="note"><b>判定基準：</b> MIOの「物件番号」とイエラブの「管理コード」の10桁番号を照合します。管理コード一致後、チェックした条件を比較します。金額は「6.8万円」「68,000円」「68000」を同じ68,000円として比較します。また、MIOの空欄とイエラブの0・0円・0ヶ月は同じ「なし」として扱います。さらに「1ヶ月」「2ヶ月」等は、その物件の賃料×月数を円換算して比較します。間取りは「SLDK＝LDK+S」「SK＝K+S」を同一表記として扱います（例：2SLDK＝2LDK+S、1SK＝1K+S）。号室は空欄とハイフン（-／‐／－等）を同一扱いにします。駐車場料金は「税込」「税別」などの文字を無視し、「1万1000円」「11,000円」「11000円」などを同じ11,000円として比較します。</div>
+<div class="note"><b>手順：</b> MIO PDFを選択 →「① PDF → CSV変換」→ 変換件数を確認 → イエラブCSVを選択 →「② 一致判定」。比較部分はv4.0の完成済みロジックを変更せず使用します。<br><b>判定基準：</b> MIOの「物件番号」とイエラブの「管理コード」の10桁番号を照合します。管理コード一致後、チェックした条件を比較します。金額は「6.8万円」「68,000円」「68000」を同じ68,000円として比較します。また、MIOの空欄とイエラブの0・0円・0ヶ月は同じ「なし」として扱います。さらに「1ヶ月」「2ヶ月」等は、その物件の賃料×月数を円換算して比較します。間取りは「SLDK＝LDK+S」「SK＝K+S」を同一表記として扱います（例：2SLDK＝2LDK+S、1SK＝1K+S）。号室は空欄とハイフン（-／‐／－等）を同一扱いにします。駐車場料金は「税込」「税別」などの文字を無視し、「1万1000円」「11,000円」「11000円」などを同じ11,000円として比較します。</div>
 </div>
 
 <div id="results">
@@ -87,7 +95,220 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 
 <script>
 const $=id=>document.getElementById(id);
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const PDF_COLS=[
+  "確認","ページ","物件番号","取引態様","物件名","号室","所在階","現況","種別","間取","専有",
+  "沿線","駅名","賃料","共益費","水道料","保証金","解約引","敷金","礼金","保険料","更新料",
+  "築年","構造","駐車場","駐車場保証金","駐車場月額"
+];
+let pdfRows=[], pdfPageCount=0;
+
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function norm(s){return String(s??"").normalize("NFKC").replace(/\s+/g,"").trim()}
+function setProgress(p,t){$("progressWrap").style.display="block";$("progressBar").style.width=p+"%";$("progressText").textContent=t}
+function err(t){$("error").style.display="block";$("error").textContent=t}
+function clearErr(){$("error").style.display="none";$("error").textContent=""}
+
+function textItems(content,viewport){
+  const out=[];
+  for(const it of content.items){
+    const s=norm(it.str);
+    if(!s) continue;
+
+    // PDF座標 → 表示座標。ページ回転(90°)もviewport側で吸収。
+    const pt=viewport.convertToViewportPoint(it.transform[4],it.transform[5]);
+    const h=Math.max(4,Math.abs(it.height||it.transform[3]||6)*viewport.scale);
+    const w=Math.max(1,(it.width||0)*viewport.scale);
+
+    out.push({
+      text:s,
+      x0:pt[0],
+      x1:pt[0]+w,
+      top:pt[1]-h,
+      bottom:pt[1],
+      cx:pt[0]+w/2,
+      cy:pt[1]-h/2
+    });
+  }
+  return out;
+}
+function join(ws){
+  return ws.slice().sort((a,b)=>a.top-b.top||a.x0-b.x0).map(w=>w.text).join("");
+}
+function cell(ws,x0,x1,split,part="all"){
+  let a=ws.filter(w=>w.cx>=x0&&w.cx<x1);
+  if(part==="top")a=a.filter(w=>w.cy<split);
+  if(part==="bottom")a=a.filter(w=>w.cy>=split);
+  return join(a);
+}
+
+function roomCell(ws,x0,x1,split){
+  // 号室は長い文字列がセル幅を超えることがあるため、
+  // 中心座標(cx)ではなく文字の開始位置(x0)で判定する。
+  const a=ws.filter(w=>w.x0>=x0&&w.x0<x1&&w.cy<split);
+  return join(a);
+}
+function cleanCell(s,labels=[]){
+  s=norm(s);
+  for(const l of labels)s=s.replaceAll(l,"");
+  return s.replace(/円$/,"");
+}
+
+function parsePage(items,pageNo){
+  // 左端の10桁物件番号を行アンカーとして使う
+  const anchors=items
+    .filter(w=>w.cx>=25&&w.cx<80&&/^10\d{8}$/.test(w.text))
+    .sort((a,b)=>a.top-b.top);
+
+  const out=[];
+  for(let i=0;i<anchors.length;i++){
+    const a=anchors[i];
+    const next=anchors[i+1];
+    const rowTop=a.top-3;
+    const rowBottom=next?Math.min(next.top-2,a.top+24.8):a.top+24.8;
+    const rw=items.filter(w=>w.cy>=rowTop&&w.cy<rowBottom);
+    const split=a.top+10.2;
+
+    const obj={
+      "確認":"",
+      "ページ":pageNo,
+      "物件番号":a.text,
+      "取引態様":cleanCell(cell(rw,25,75,split,"bottom"),["物件番号"]),
+      "物件名":cleanCell(cell(rw,75,158,split)),
+      "号室":cleanCell(roomCell(rw,158,180,split)),
+      "所在階":cleanCell(cell(rw,158,180,split,"bottom")),
+      "現況":cleanCell(cell(rw,180,207,split)),
+      "種別":cleanCell(cell(rw,207,268,split,"top")),
+      "間取":cleanCell(cell(rw,207,236,split,"bottom")),
+      "専有":cleanCell(cell(rw,236,268,split,"bottom")),
+      "沿線":cleanCell(cell(rw,268,342,split,"top")),
+      "駅名":cleanCell(cell(rw,268,342,split,"bottom")),
+      "賃料":cleanCell(cell(rw,342,417,split),["賃"]),
+      "共益費":cleanCell(cell(rw,417,474,split,"top"),["共"]),
+      "水道料":cleanCell(cell(rw,417,474,split,"bottom"),["水"]),
+      "保証金":cleanCell(cell(rw,474,530,split,"top"),["保"]),
+      "解約引":cleanCell(cell(rw,474,530,split,"bottom"),["解"]),
+      "敷金":cleanCell(cell(rw,530,590,split,"top"),["敷"]),
+      "礼金":cleanCell(cell(rw,530,590,split,"bottom"),["礼"]),
+      "保険料":cleanCell(cell(rw,590,642,split,"top"),["保"]),
+      "更新料":cleanCell(cell(rw,590,642,split,"bottom"),["更"]),
+      "築年":cleanCell(cell(rw,642,696,split,"top")),
+      "構造":cleanCell(cell(rw,642,696,split,"bottom")),
+      "駐車場":cleanCell(cell(rw,696,749,split)),
+      "駐車場保証金":cleanCell(cell(rw,749,805,split,"top"),["保"]),
+      "駐車場月額":cleanCell(cell(rw,749,805,split,"bottom"),["月"])
+    };
+
+    // 号室がセル内で2段折り返しになる帳票に対応。
+    // 例：上段「11-」＋下段「308」と「(3階)」が同じ欄にある場合
+    // → 号室「11-308」、所在階「(3階)」に分離する。
+    if(/[-‐‑‒–—―ー]$/.test(obj["号室"])){
+      const floorRaw=String(obj["所在階"]||"");
+      const roomTail=floorRaw.match(/^(\d{1,4})(?=\(|（)/);
+      if(roomTail){
+        obj["号室"]+=roomTail[1];
+        obj["所在階"]=floorRaw.slice(roomTail[1].length);
+      }else{
+        // PDF抽出順によって「(3階)308」の順になる場合にも対応
+        const tailAfter=floorRaw.match(/^(.*?[)）])(\d{1,4})$/);
+        if(tailAfter){
+          obj["号室"]+=tailAfter[2];
+          obj["所在階"]=tailAfter[1];
+        }
+      }
+    }
+
+    // 最低限の品質チェック。要確認はExcelでも先頭列に残す。
+    const problems=[];
+    if(!/^10\d{8}$/.test(obj["物件番号"]))problems.push("物件番号");
+    if(!obj["物件名"])problems.push("物件名");
+    if(!/[\d,]+/.test(obj["賃料"]))problems.push("賃料");
+    if(!obj["現況"])problems.push("現況");
+    obj["確認"]=problems.length?"要確認："+problems.join("・"):"OK";
+    out.push(obj);
+  }
+  return out;
+}
+
+
 let results=[],mio=[],ielove=[],tab="attention";
+
+let mioConvertedRows=[];
+
+function pdfProgress(p,t){
+  $("progressWrap").style.display="block";
+  $("progressBar").style.width=p+"%";
+  $("progressText").textContent=t;
+}
+function pdfError(t){
+  $("error").style.display="block";
+  $("error").textContent=t;
+}
+function clearPdfError(){
+  $("error").style.display="none";
+  $("error").textContent="";
+}
+
+async function convertPdfToCsvData(){
+  clearPdfError();
+  $("convertOk").style.display="none";
+  const file=$("mioPdfFile").files[0];
+  if(!file){pdfError("MIO PDFを選択してください。");return}
+
+  $("convertBtn").disabled=true;
+  $("runBtn").disabled=true;
+  $("saveMioCsvBtn").disabled=true;
+  mioConvertedRows=[];
+
+  try{
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+    pdfPageCount=pdf.numPages;
+
+    for(let p=1;p<=pdf.numPages;p++){
+      pdfProgress(Math.round((p-1)/pdf.numPages*92),`PDF解析中 ${p}/${pdf.numPages}ページ`);
+      const page=await pdf.getPage(p);
+      const viewport=page.getViewport({scale:1,rotation:page.rotate});
+      const content=await page.getTextContent();
+      mioConvertedRows.push(...parsePage(textItems(content,viewport),p));
+    }
+
+    pdfProgress(96,"重複・読取状態を確認しています...");
+    const counts={};
+    mioConvertedRows.forEach(r=>counts[r["物件番号"]]=(counts[r["物件番号"]]||0)+1);
+    mioConvertedRows.forEach(r=>{
+      if(counts[r["物件番号"]]>1 && r["確認"]==="OK")r["確認"]="要確認：物件番号重複";
+    });
+
+    if(!mioConvertedRows.length) throw new Error("PDFから物件を読み取れませんでした");
+
+    const warnings=mioConvertedRows.filter(r=>r["確認"]!=="OK").length;
+    pdfProgress(100,`完了：${mioConvertedRows.length}件をCSVデータ化しました`);
+    $("convertOk").textContent=`✓ CSV化完了：${mioConvertedRows.length}件 / ${pdfPageCount}ページ${warnings?` / 要確認 ${warnings}件`:""}`;
+    $("convertOk").style.display="block";
+    $("runBtn").disabled=false;
+    $("saveMioCsvBtn").disabled=false;
+  }catch(e){
+    console.error(e);
+    pdfError("変換できませんでした："+(e?.message||e));
+  }finally{
+    $("convertBtn").disabled=false;
+  }
+}
+
+function saveConvertedMioCsv(){
+  if(!mioConvertedRows.length)return;
+  const escape=v=>`"${String(v??"").replaceAll('"','""')}"`;
+  const lines=[PDF_COLS.map(escape).join(","),...mioConvertedRows.map(r=>PDF_COLS.map(c=>escape(r[c])).join(","))];
+  const blob=new Blob(["\uFEFF"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`MIO変換_${new Date().toISOString().slice(0,10).replaceAll("-","")}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 const LABEL={rent:"賃料",management:"共益費・管理費",water:"水道料",guarantee:"保証金",deposit:"敷金",keyMoney:"礼金",insurance:"保険料",renewal:"更新料",parking:"駐車場月額",room:"号室",layout:"間取り",area:"専有面積",status:"現況",name:"物件名"};
 function clean(v){v=String(v??"").normalize("NFKC").trim();if(v.startsWith('="')&&v.endsWith('"'))v=v.slice(2,-1);return v.trim()}
 function compact(v){return clean(v).replace(/[ 　\t\r\n]/g,"")}
@@ -269,7 +490,36 @@ function render(){
  $("rowCount").textContent=`${rs.length}件表示 / 全${results.length}件`;
 }
 function summary(){$("aCount").textContent=mio.length;$("iCount").textContent=ielove.length;$("okCount").textContent=results.filter(r=>r.type==="ok").length;$("missCount").textContent=results.filter(r=>r.type==="missing").length;$("diffCount").textContent=results.filter(r=>r.type==="diff").length;$("extraCount").textContent=results.filter(r=>r.type==="extra").length}
-async function run(){ $("error").style.display="none";const af=$("mioFile").files[0],ifile=$("ieloveFile").files[0];if(!af||!ifile){$("error").style.display="block";$("error").textContent="MIO CSVとイエラブCSVを両方選択してください。";return}try{mio=parseMio(await readCsv(af));ielove=parseIelove(await readCsv(ifile));if(!mio.length)throw new Error("MIO CSVから10桁の物件番号を読み取れませんでした");if(!ielove.length)throw new Error("イエラブCSVを読み取れませんでした");results=compare();summary();tab="attention";document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="attention"));render();$("results").style.display="block";$("results").scrollIntoView({behavior:"smooth"})}catch(e){$("error").style.display="block";$("error").textContent="照合できませんでした："+e.message}}
+async function run(){
+ $("error").style.display="none";
+ const ifile=$("ieloveFile").files[0];
+ if(!mioConvertedRows.length){
+   $("error").style.display="block";
+   $("error").textContent="先に① PDF → CSV変換を実行してください。";
+   return;
+ }
+ if(!ifile){
+   $("error").style.display="block";
+   $("error").textContent="イエラブCSVを選択してください。";
+   return;
+ }
+ try{
+   mio=parseMio(mioConvertedRows);
+   ielove=parseIelove(await readCsv(ifile));
+   if(!mio.length)throw new Error("MIO変換データから10桁の物件番号を読み取れませんでした");
+   if(!ielove.length)throw new Error("イエラブCSVを読み取れませんでした");
+   results=compare();
+   summary();
+   tab="attention";
+   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="attention"));
+   render();
+   $("results").style.display="block";
+   $("results").scrollIntoView({behavior:"smooth"});
+ }catch(e){
+   $("error").style.display="block";
+   $("error").textContent="照合できませんでした："+e.message;
+ }
+}
 function expRows(rs=results){return rs.map(r=>({"判定":r.type==="ok"?"一致":r.type==="missing"?"未登録":r.type==="diff"?"条件相違":"イエラブのみ","管理コード":r.code,"物件名":r.name,"号室":r.room,"所在地":r.address,"相違項目":r.diff.join(" / "),"MIO":r.a,"イエラブ":r.i,"備考":r.note}))}
 function xlsx(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["項目","件数"],["MIO",mio.length],["イエラブ",ielove.length],["一致",results.filter(r=>r.type==="ok").length],["未登録",results.filter(r=>r.type==="missing").length],["条件相違",results.filter(r=>r.type==="diff").length],["イエラブのみ",results.filter(r=>r.type==="extra").length]]),"サマリー");[["要確認",results.filter(r=>["missing","diff"].includes(r.type))],["未登録",results.filter(r=>r.type==="missing")],["条件相違",results.filter(r=>r.type==="diff")],["一致",results.filter(r=>r.type==="ok")],["イエラブのみ",results.filter(r=>r.type==="extra")],["全件",results]].forEach(([n,r])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(expRows(r)),n));XLSX.writeFile(wb,`MIO_イエラブ照合_${new Date().toISOString().slice(0,10).replaceAll("-","")}.xlsx`)}
 function csv(){const s=Papa.unparse(expRows());const b=new Blob(["\uFEFF"+s],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="MIO_イエラブ照合.csv";a.click();URL.revokeObjectURL(a.href)}
@@ -309,11 +559,20 @@ function copyTextReliable(text,label){
    toast("コピーできませんでした。ブラウザの権限をご確認ください");
  }
 }
-$("runBtn").onclick=run;$("xlsxBtn").onclick=xlsx;$("csvBtn").onclick=csv;$("search").oninput=render;
+$("convertBtn").onclick=convertPdfToCsvData;$("runBtn").onclick=run;$("saveMioCsvBtn").onclick=saveConvertedMioCsv;$("xlsxBtn").onclick=xlsx;$("csvBtn").onclick=csv;$("search").oninput=render;
 document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>{tab=x.dataset.tab;document.querySelectorAll(".tab").forEach(y=>y.classList.toggle("active",x===y));render()});
-[["mioFile","aName"],["ieloveFile","iName"]].forEach(([f,n])=>$(f).onchange=e=>$(n).textContent=e.target.files[0]?.name||"未選択");
+[["mioPdfFile","aName"],["ieloveFile","iName"]].forEach(([f,n])=>$(f).onchange=e=>$(n).textContent=e.target.files[0]?.name||"未選択");
 $("resetBtn").onclick=()=>location.reload();
-function drop(id,input){const d=$(id);["dragenter","dragover"].forEach(e=>d.addEventListener(e,x=>{x.preventDefault();d.classList.add("drag")}));["dragleave","drop"].forEach(e=>d.addEventListener(e,x=>{x.preventDefault();d.classList.remove("drag")}));d.addEventListener("drop",e=>{const f=[...e.dataTransfer.files].find(x=>x.name.toLowerCase().endsWith(".csv"));if(!f)return;const dt=new DataTransfer();dt.items.add(f);$(input).files=dt.files;$(input).dispatchEvent(new Event("change"))})}
-drop("aDrop","mioFile");drop("iDrop","ieloveFile");
+function drop(id,input,ext){
+ const d=$(id);
+ ["dragenter","dragover"].forEach(e=>d.addEventListener(e,x=>{x.preventDefault();d.classList.add("drag")}));
+ ["dragleave","drop"].forEach(e=>d.addEventListener(e,x=>{x.preventDefault();d.classList.remove("drag")}));
+ d.addEventListener("drop",e=>{
+   const f=[...e.dataTransfer.files].find(x=>x.name.toLowerCase().endsWith(ext));
+   if(!f)return;
+   const dt=new DataTransfer();dt.items.add(f);$(input).files=dt.files;$(input).dispatchEvent(new Event("change"));
+ });
+}
+drop("aDrop","mioPdfFile",".pdf");drop("iDrop","ieloveFile",".csv");
 </script>
 <div id="toast"></div></body></html>
