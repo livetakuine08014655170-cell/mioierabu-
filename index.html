@@ -29,7 +29,7 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 </style>
 </head>
 <body>
-<header><div class="inner"><h1>🏠 MIO PDF → CSV → イエラブ照合ツール</h1><p>① MIO PDFをCSVデータ化 → ② 完成済みCSV⇔CSVロジックでイエラブと照合します。v5.2</p></div></header>
+<header><div class="inner"><h1>🏠 MIO PDF → CSV → イエラブ照合ツール</h1><p>① MIO PDFをCSVデータ化 → ② 完成済みCSV⇔CSVロジックでイエラブと照合します。v5.3</p></div></header>
 <div class="wrap">
 <div class="panel">
 <h2>① MIO PDFをCSVデータに変換</h2>
@@ -144,10 +144,26 @@ function cell(ws,x0,x1,split,part="all"){
 }
 
 function roomCell(ws,x0,x1,split){
-  // 号室は長い文字列がセル幅を超えることがあるため、
-  // 中心座標(cx)ではなく文字の開始位置(x0)で判定する。
-  const a=ws.filter(w=>w.x0>=x0&&w.x0<x1&&w.cy<split);
-  return join(a);
+  // 号室が長い場合、PDF内部で「A120」+「6」のように分割され、
+  // 末尾だけが次セル側にはみ出すことがあるため、現況列手前まで拾う。
+  const statusWords=["空室","空家","空き","入居中","退去予定","即入居可"];
+  const a=ws
+    .filter(w=>w.x0>=x0 && w.x0<207 && w.cy<split)
+    .filter(w=>!statusWords.some(s=>String(w.text).includes(s)))
+    .sort((a,b)=>a.x0-b.x0);
+
+  const picked=[];
+  for(const w of a){
+    if(!picked.length){
+      picked.push(w);
+      continue;
+    }
+    const prev=picked[picked.length-1];
+    const gap=w.x0-prev.x1;
+    if(gap>5) break;
+    picked.push(w);
+  }
+  return join(picked);
 }
 function cleanCell(s,labels=[]){
   s=norm(s);
