@@ -29,7 +29,7 @@ input[type=file]{width:100%;margin-top:11px}.filename{font-size:13px;color:var(-
 </style>
 </head>
 <body>
-<header><div class="inner"><h1>🏠 MIO PDF → CSV → イエラブ照合ツール</h1><p>① MIO PDFをCSVデータ化 → ② 完成済みCSV⇔CSVロジックでイエラブと照合します。v5.3</p></div></header>
+<header><div class="inner"><h1>🏠 MIO PDF → CSV → イエラブ照合ツール</h1><p>① MIO PDFをCSVデータ化 → ② 完成済みCSV⇔CSVロジックでイエラブと照合します。v5.9</p></div></header>
 <div class="wrap">
 <div class="panel">
 <h2>① MIO PDFをCSVデータに変換</h2>
@@ -216,19 +216,22 @@ function parsePage(items,pageNo){
       "駐車場月額":cleanCell(cell(rw,749,805,split,"bottom"),["月"])
     };
 
-    // 号室がセル内で2段折り返しになる帳票に対応。
-    // 例：上段「11-」＋下段「308」と「(3階)」が同じ欄にある場合
-    // → 号室「11-308」、所在階「(3階)」に分離する。
-    if(/[-‐‑‒–—―ー]$/.test(obj["号室"])){
+    // 号室がセル幅を超えて、末尾だけ所在階側へ回り込む帳票に対応。
+    // 例1：「11-」+「308(3階)」 → 11-308
+    // 例2：「A120」+「6(12階)」 → A1206
+    // 例3：「A120」+「(12階)6」 → A1206
+    {
       const floorRaw=String(obj["所在階"]||"");
+
+      // 所在階セル先頭に号室末尾の数字が付くケース
       const roomTail=floorRaw.match(/^(\d{1,4})(?=\(|（)/);
-      if(roomTail){
+      if(roomTail && /[A-Z0-9\-‐‑‒–—―ー]$/i.test(String(obj["号室"]||""))){
         obj["号室"]+=roomTail[1];
         obj["所在階"]=floorRaw.slice(roomTail[1].length);
       }else{
-        // PDF抽出順によって「(3階)308」の順になる場合にも対応
+        // PDF抽出順によって「(12階)6」のように末尾へ出るケース
         const tailAfter=floorRaw.match(/^(.*?[)）])(\d{1,4})$/);
-        if(tailAfter){
+        if(tailAfter && /[A-Z0-9\-‐‑‒–—―ー]$/i.test(String(obj["号室"]||""))){
           obj["号室"]+=tailAfter[2];
           obj["所在階"]=tailAfter[1];
         }
@@ -377,9 +380,23 @@ function parkingMoney(v){
 }
 function area(v){const m=compact(v).match(/(\d+(?:\.\d+)?)/);return m?Number(m[1]):null}
 function room(v){
- let s=compact(v).replace(/\((公開|非公開)\)/g,"").replace(/号室$/,"").toUpperCase();
- // 号室は空欄・各種ハイフンを同じ「なし」として扱う
- if(!s || s==="-" || s==="‐" || s==="－" || s==="—" || s==="–" || s==="―") return "";
+ let s=String(v??"").normalize("NFKC").toUpperCase().trim();
+
+ // 比較専用：公開/非公開、号室表記、空白を除去
+ s=s.replace(/[（(](?:公開|非公開)[）)]/g,"");
+ s=s.replace(/号室$/,"");
+ s=s.replace(/\s+/g,"");
+
+ // 空欄とハイフンのみは同じ扱い
+ if(!s || /^[-‐‑‒–—―ー－−]+$/.test(s)) return "";
+
+ // 英字付き号室は「英字＋数字」だけで比較する。
+ // A-5 / A5 / A－5 / A5(非公開) => A5
+ // A-1206 / A1206 => A1206
+ const m=s.match(/^([A-Z]+)[^A-Z0-9]*(\d+)$/);
+ if(m) return m[1]+m[2];
+
+ // 数字始まりは 11-204 のような枝番を保持
  return s;
 }
 function layout(v){
@@ -461,7 +478,19 @@ function compare(){
  for(const a of mio){
    const ms=map.get(a.code)||[];
    if(!ms.length){out.push({type:"missing",code:a.code,name:a.name,room:a.room,address:"",diff:[],a:"",i:"",note:"MIOにはあるがイエラブ管理コードに一致なし"+(a.parking&&parkingMoney(a.parking)!=="0"?` / 駐車場：${mioParkingDisplay(a)}`:"")});continue}
-   let i=ms.find(x=>room(x.room)===room(a.room))||ms[0];
+   // 管理コードが同じでも号室が一致しなければ、別部屋を勝手に採用しない。
+   // 比較専用room()で A-5 = A5 のような表記揺れだけ吸収する。
+   let i=ms.find(x=>room(x.room)===room(a.room));
+   if(!i){
+     out.push({
+       type:"diff",code:a.code,name:a.name,room:a.room,address:"",
+       diff:["号室"],
+       a:`号室：${clean(a.room)}`,
+       i:`号室：${ms.map(x=>clean(x.room)).filter(Boolean).join(" / ")}`,
+       note:"管理コード一致・号室不一致"
+     });
+     continue;
+   }
    const ds=fields().filter(f=>!eq(f,a[f],i[f],a,i));
    if(ds.length)out.push({type:"diff",code:a.code,name:i.name||a.name,room:i.room||a.room,address:i.address||"",diff:ds.map(f=>LABEL[f]),a:ds.map(f=>`${LABEL[f]}：${f==="parking"?mioParkingDisplay(a):val(f,a[f],a)}`).join(" / "),i:ds.map(f=>`${LABEL[f]}：${val(f,i[f],i)}`).join(" / "),note:"管理コード一致・条件相違"});
    else out.push({type:"ok",code:a.code,name:i.name||a.name,room:i.room||a.room,address:i.address||"",diff:[],a:"",i:"",note:"管理コード・選択条件一致"});
